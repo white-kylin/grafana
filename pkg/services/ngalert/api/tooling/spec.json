@@ -2519,6 +2519,30 @@
         }
       }
     },
+    "/api/v1/provisioning/policies/export": {
+      "get": {
+        "tags": [
+          "provisioning",
+          "stable"
+        ],
+        "summary": "Export the notification policy tree in provisioning file format.",
+        "operationId": "RouteGetPolicyTreeExport",
+        "responses": {
+          "200": {
+            "description": "AlertingFileExport",
+            "schema": {
+              "$ref": "#/definitions/AlertingFileExport"
+            }
+          },
+          "404": {
+            "description": "NotFound",
+            "schema": {
+              "$ref": "#/definitions/NotFound"
+            }
+          }
+        }
+      }
+    },
     "/api/v1/provisioning/templates": {
       "get": {
         "tags": [
@@ -3058,6 +3082,12 @@
           "type": "array",
           "items": {
             "$ref": "#/definitions/AlertRuleGroupExport"
+          }
+        },
+        "policies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NotificationPolicyExport"
           }
         }
       }
@@ -4642,6 +4672,19 @@
       "format": "int64",
       "title": "NoticeSeverity is a type for the Severity property of a Notice."
     },
+    "NotificationPolicyExport": {
+      "type": "object",
+      "title": "NotificationPolicyExport is the provisioned file export of alerting.NotificiationPolicyV1.",
+      "properties": {
+        "Policy": {
+          "$ref": "#/definitions/RouteExport"
+        },
+        "orgId": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
     "NotificationTemplate": {
       "type": "object",
       "properties": {
@@ -5712,6 +5755,61 @@
         }
       }
     },
+    "RouteExport": {
+      "description": "RouteExport is the provisioned file export of definitions.Route. This is needed to hide fields that aren't useable in\nprovisioning file format. An alternative would be to define a custom MarshalJSON and MarshalYAML that excludes them.",
+      "type": "object",
+      "properties": {
+        "continue": {
+          "type": "boolean"
+        },
+        "group_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "group_interval": {
+          "type": "string"
+        },
+        "group_wait": {
+          "type": "string"
+        },
+        "match": {
+          "description": "Deprecated. Remove before v1.0 release.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "match_re": {
+          "$ref": "#/definitions/MatchRegexps"
+        },
+        "matchers": {
+          "$ref": "#/definitions/Matchers"
+        },
+        "mute_time_intervals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "object_matchers": {
+          "$ref": "#/definitions/ObjectMatchers"
+        },
+        "receiver": {
+          "type": "string"
+        },
+        "repeat_interval": {
+          "type": "string"
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/RouteExport"
+          }
+        }
+      }
+    },
     "Rule": {
       "description": "adapted from cortex",
       "type": "object",
@@ -6451,9 +6549,8 @@
       }
     },
     "URL": {
-      "description": "The general form represented is:\n\n[scheme:][//[userinfo@]host][/]path[?query][#fragment]\n\nURLs that do not start with a slash after the scheme are interpreted as:\n\nscheme:opaque[?query][#fragment]\n\nNote that the Path field is stored in decoded form: /%47%6f%2f becomes /Go/.\nA consequence is that it is impossible to tell which slashes in the Path were\nslashes in the raw URL and which were %2f. This distinction is rarely important,\nbut when it is, the code should use RawPath, an optional field which only gets\nset if the default encoding is different from Path.\n\nURL's String method uses the EscapedPath method to obtain the path. See the\nEscapedPath method for more details.",
       "type": "object",
-      "title": "A URL represents a parsed URL (technically, a URI reference).",
+      "title": "URL is a custom URL type that allows validation at configuration load time.",
       "properties": {
         "ForceQuery": {
           "type": "boolean"
@@ -6796,7 +6893,6 @@
       }
     },
     "gettableAlert": {
-      "description": "GettableAlert gettable alert",
       "type": "object",
       "required": [
         "labels",
@@ -6861,7 +6957,6 @@
       "$ref": "#/definitions/gettableAlerts"
     },
     "gettableSilence": {
-      "description": "GettableSilence gettable silence",
       "type": "object",
       "required": [
         "comment",
@@ -6911,6 +7006,7 @@
       "$ref": "#/definitions/gettableSilence"
     },
     "gettableSilences": {
+      "description": "GettableSilences gettable silences",
       "type": "array",
       "items": {
         "$ref": "#/definitions/gettableSilence"
@@ -6918,7 +7014,6 @@
       "$ref": "#/definitions/gettableSilences"
     },
     "integration": {
-      "description": "Integration integration",
       "type": "object",
       "required": [
         "name",
@@ -7063,7 +7158,6 @@
       }
     },
     "postableSilence": {
-      "description": "PostableSilence postable silence",
       "type": "object",
       "required": [
         "comment",

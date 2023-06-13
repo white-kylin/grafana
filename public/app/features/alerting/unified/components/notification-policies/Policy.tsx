@@ -13,9 +13,11 @@ import { RouteWithID, Receiver, ObjectMatcher, AlertmanagerGroup } from 'app/plu
 import { ReceiversState } from 'app/types';
 
 import { getNotificationsPermissions } from '../../utils/access-control';
+import { useRulesAccess } from '../../utils/accessControlHooks';
 import { normalizeMatchers } from '../../utils/matchers';
 import { createContactPointLink, createMuteTimingLink } from '../../utils/misc';
 import { getInheritedProperties, InhertitableProperties } from '../../utils/notification-policies';
+import { createUrl } from '../../utils/url';
 import { HoverCard } from '../HoverCard';
 import { Label } from '../Label';
 import { MetaText } from '../MetaText';
@@ -108,7 +110,7 @@ const Policy: FC<PolicyComponentProps> = ({
   const singleGroup = isDefaultPolicy && isArray(groupBy) && groupBy.length === 0;
 
   const isEditable = canEditRoutes;
-  const isDeletable = canDeleteRoutes && !isDefaultPolicy;
+  const isDeletable = !readOnly && canDeleteRoutes && !isDefaultPolicy;
 
   const matchingAlertGroups = matchingInstancesPreview?.groupsMap?.get(currentRoute.id);
 
@@ -116,6 +118,9 @@ const Policy: FC<PolicyComponentProps> = ({
   const numberOfAlertInstances = matchingAlertGroups
     ? sumBy(matchingAlertGroups, (group) => group.alerts.length)
     : undefined;
+
+  const { canReadProvisioning } = useRulesAccess();
+  const showExport = canReadProvisioning && isDefaultPolicy;
 
   // TODO dead branch detection, warnings for all sort of configs that won't work or will never be activated
   return (
@@ -141,26 +146,41 @@ const Policy: FC<PolicyComponentProps> = ({
               <Spacer />
               {/* TODO maybe we should move errors to the gutter instead? */}
               {errors.length > 0 && <Errors errors={errors} />}
-              {!readOnly && (
+              {(!readOnly || showExport) && (
                 <Stack direction="row" gap={0.5}>
-                  <Button
-                    variant="secondary"
-                    icon="plus"
-                    size="sm"
-                    onClick={() => onAddPolicy(currentRoute)}
-                    type="button"
-                  >
-                    New nested policy
-                  </Button>
+                  {!readOnly && (
+                    <Button
+                      variant="secondary"
+                      icon="plus"
+                      size="sm"
+                      onClick={() => onAddPolicy(currentRoute)}
+                      type="button"
+                    >
+                      New nested policy
+                    </Button>
+                  )}
                   <Dropdown
                     overlay={
                       <Menu>
-                        <Menu.Item
-                          icon="pen"
-                          disabled={!isEditable}
-                          label="Edit"
-                          onClick={() => onEditPolicy(currentRoute, isDefaultPolicy)}
-                        />
+                        {!readOnly && (
+                          <Menu.Item
+                            icon="pen"
+                            disabled={!isEditable}
+                            label="Edit"
+                            onClick={() => onEditPolicy(currentRoute, isDefaultPolicy)}
+                          />
+                        )}
+                        {showExport && (
+                          <Menu.Item
+                            icon="download-alt"
+                            label="Export"
+                            url={createUrl('/api/v1/provisioning/policies/export', {
+                              download: 'true',
+                              format: 'yaml',
+                            })}
+                            target="_blank"
+                          />
+                        )}
                         {isDeletable && (
                           <>
                             <Menu.Divider />
