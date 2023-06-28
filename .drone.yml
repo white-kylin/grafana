@@ -2945,6 +2945,7 @@ steps:
   name: compile-build-cmd
 - commands:
   - ./bin/build artifacts packages --tag $${{DRONE_TAG}} --src-bucket $${{PRERELEASE_BUCKET}}
+    --artifacts-editions=oss
   depends_on:
   - compile-build-cmd
   environment:
@@ -4620,6 +4621,6 @@ kind: secret
 name: delivery-bot-app-private-key
 ---
 kind: signature
-hmac: 2b312382ea02f950cad3dae07e9fea35469ea2bf23f1ba679d4c85eab8fac15d
+hmac: 134038340e3c8fab64a1ffc287ec4bc63d41f750de3df066278fdadd5a1dd38c
 
 ...
