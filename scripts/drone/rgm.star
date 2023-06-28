@@ -79,7 +79,6 @@ def rgm_main():
 
     return pipeline(
         name = "rgm-main-prerelease",
-        edition = "all",
         trigger = trigger,
         steps = rgm_build(),
         depends_on = ["main-test-backend", "main-test-frontend"],
@@ -104,7 +103,6 @@ tag_trigger = {
 def rgm_tag():
     return pipeline(
         name = "rgm-tag-prerelease",
-        edition = "all",
         trigger = tag_trigger,
         steps = rgm_build(script = "drone_publish_tag.sh"),
         depends_on = [],

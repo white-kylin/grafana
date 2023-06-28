@@ -23,7 +23,6 @@ def publish_ci_windows_test_image_pipeline():
     pl = pipeline(
         name = "publish-ci-windows-test-image",
         trigger = trigger,
-        edition = "",
         platform = "windows",
         steps = [
             {
