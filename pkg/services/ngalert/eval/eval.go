@@ -39,6 +39,8 @@ type ConditionEvaluator interface {
 	EvaluateRaw(ctx context.Context, now time.Time) (resp *backend.QueryDataResponse, err error)
 	// Evaluate evaluates the condition and converts the response to Results
 	Evaluate(ctx context.Context, now time.Time) (Results, error)
+
+	Prepare(state PreviousState)
 }
 
 type expressionService interface {
@@ -72,6 +74,26 @@ func (r *conditionEvaluator) EvaluateRaw(ctx context.Context, now time.Time) (re
 		execCtx = timeoutCtx
 	}
 	return r.expressionService.ExecutePipeline(execCtx, now, r.pipeline)
+}
+
+func (r *conditionEvaluator) Prepare(prev PreviousState) {
+	for _, node := range r.pipeline {
+		if node.NodeType() != expr.TypeCMDNode {
+			continue
+		}
+		cmdNode, ok := node.(*expr.CMDNode)
+		if !ok {
+			continue
+		}
+		if cmdNode.CMDType != expr.TypeHysteresis {
+			continue
+		}
+		hyst, ok := cmdNode.Command.(*expr.HysteresisCommand)
+		if !ok {
+			continue
+		}
+		hyst.Init(prev.ActiveResults)
+	}
 }
 
 // Evaluate evaluates the condition and converts the response to Results
@@ -669,4 +691,8 @@ func (e *evaluatorImpl) create(condition models.Condition, req *expr.Request) (C
 		conditions = append(conditions, node.RefID())
 	}
 	return nil, fmt.Errorf("condition %s does not exist, must be one of %v", condition.Condition, conditions)
+}
+
+type PreviousState struct {
+	ActiveResults map[uint64]struct{}
 }
