@@ -12,16 +12,16 @@ import (
 	"github.com/grafana/grafana/pkg/util"
 )
 
+type LoadedMetricsReader interface {
+	Read(ctx context.Context) (map[uint64]struct{}, error)
+}
+
 type HysteresisCommand struct {
 	RefID                  string
 	ReferenceVar           string
 	LoadingThresholdFunc   ThresholdCommand
 	UnloadingThresholdFunc ThresholdCommand
-	loaded                 map[uint64]struct{}
-}
-
-func (h *HysteresisCommand) Init(active map[uint64]struct{}) {
-	h.loaded = active
+	LoadedReader           LoadedMetricsReader
 }
 
 func (h *HysteresisCommand) NeedsVars() []string {
@@ -29,15 +29,31 @@ func (h *HysteresisCommand) NeedsVars() []string {
 }
 
 func (h *HysteresisCommand) Execute(ctx context.Context, now time.Time, vars mathexp.Vars, tracer tracing.Tracer) (mathexp.Results, error) {
+	l := logger.FromContext(ctx)
 	results := vars[h.ReferenceVar]
-	if len(h.loaded) == 0 || len(results.Values) == 0 {
+
+	// shortcut for NoData
+	if results.IsNoData() {
+		return mathexp.Results{Values: mathexp.Values{mathexp.NewNoData()}}, nil
+	}
+
+	if h.LoadedReader == nil {
+		l.Warn("Loaded metrics reader is not configured. Evaluate using loading threshold expression")
+		return h.LoadingThresholdFunc.Execute(ctx, now, vars, tracer)
+	}
+	l.Debug("Reading loaded metrics")
+	loaded, err := h.LoadedReader.Read(ctx)
+	if err != nil {
+		return mathexp.Results{}, err
+	}
+	l.Debug("Got loaded metrics", "count", logger)
+	if len(loaded) == 0 || len(results.Values) == 0 {
 		return h.LoadingThresholdFunc.Execute(ctx, now, vars, tracer)
 	}
 	var loadedVals, unloadedVals mathexp.Values
 
-	// TODO shortcut for NOData?
 	for _, value := range results.Values {
-		_, ok := h.loaded[util.CalculateFingerprintForLabels(value.GetLabels())] // TODO technically we can refer to the previous value too
+		_, ok := loaded[util.CalculateFingerprintForLabels(value.GetLabels())]
 		if ok {
 			loadedVals = append(loadedVals, value)
 		} else {
@@ -71,16 +87,17 @@ func (h *HysteresisCommand) Execute(ctx context.Context, now time.Time, vars mat
 	return mathexp.Results{Values: append(loadingResults.Values, unloadingResults.Values...)}, nil
 }
 
-func NewHysteresisCommand(refID string, referenceVar string, loadCondition ThresholdCommand, unloadCondition ThresholdCommand) *HysteresisCommand {
+func NewHysteresisCommand(refID string, referenceVar string, loadCondition ThresholdCommand, unloadCondition ThresholdCommand, r LoadedMetricsReader) *HysteresisCommand {
 	return &HysteresisCommand{
 		RefID:                  refID,
 		LoadingThresholdFunc:   loadCondition,
 		UnloadingThresholdFunc: unloadCondition,
 		ReferenceVar:           referenceVar,
+		LoadedReader:           r,
 	}
 }
 
-func UnmarshalHysteresisCommand(rn *rawNode) (*HysteresisCommand, error) {
+func UnmarshalHysteresisCommand(rn *rawNode, r LoadedMetricsReader) (*HysteresisCommand, error) {
 	rawQuery := rn.Query
 
 	rawExpression, ok := rawQuery["expression"]
@@ -126,5 +143,5 @@ func UnmarshalHysteresisCommand(rn *rawNode) (*HysteresisCommand, error) {
 		return nil, fmt.Errorf("failed to initialize unload condition command: %w", err)
 	}
 
-	return NewHysteresisCommand(rn.RefID, referenceVar, *loadThresholdCmd, *unloadConditionCmd), nil
+	return NewHysteresisCommand(rn.RefID, referenceVar, *loadThresholdCmd, *unloadConditionCmd, r), nil
 }

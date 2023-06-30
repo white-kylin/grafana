@@ -373,15 +373,16 @@ func (sch *schedule) ruleRoutine(grafanaCtx context.Context, key ngmodels.AlertR
 		start := sch.clock.Now()
 
 		evalCtx := eval.NewContext(ctx, SchedulerUserFor(e.rule.OrgID))
-		ruleEval, err := sch.evaluatorFactory.Create(evalCtx, e.rule.GetEvalCondition())
+		ruleEval, err := sch.evaluatorFactory.Create(evalCtx, e.rule.GetEvalCondition(), &LoadedMetricsFromState{
+			manager: sch.stateManager,
+			rule:    e.rule,
+		})
 		var results eval.Results
 		var dur time.Duration
 		if err != nil {
 			dur = sch.clock.Now().Sub(start)
 			logger.Error("Failed to build rule evaluator", "error", err)
 		} else {
-			states := sch.stateManager.GetStatesForRuleUID(e.rule.OrgID, e.rule.UID)
-			ruleEval.Prepare(eval.PreviousState{ActiveResults: convertStatesToPreviousResults(states)})
 			results, err = ruleEval.Evaluate(ctx, e.scheduledAt)
 			dur = sch.clock.Now().Sub(start)
 			if err != nil {
@@ -580,12 +581,19 @@ func SchedulerUserFor(orgID int64) *user.SignedInUser {
 	}
 }
 
-func convertStatesToPreviousResults(s []*state.State) map[uint64]struct{} {
+type LoadedMetricsFromState struct {
+	manager *state.Manager
+	rule    *ngmodels.AlertRule
+}
+
+func (n LoadedMetricsFromState) Read(_ context.Context) (map[uint64]struct{}, error) {
+	states := n.manager.GetStatesForRuleUID(n.rule.OrgID, n.rule.UID)
+
 	active := map[uint64]struct{}{}
-	for _, st := range s {
+	for _, st := range states {
 		if st.State == eval.Alerting || st.State == eval.Pending {
 			active[st.ResultHash] = struct{}{}
 		}
 	}
-	return active
+	return active, nil
 }

@@ -30,7 +30,7 @@ type EvaluatorFactory interface {
 	// Validate validates that the condition is correct. Returns nil if the condition is correct. Otherwise, error that describes the failure
 	Validate(ctx EvaluationContext, condition models.Condition) error
 	// Create builds an evaluator pipeline ready to evaluate a rule's query
-	Create(ctx EvaluationContext, condition models.Condition) (ConditionEvaluator, error)
+	Create(ctx EvaluationContext, condition models.Condition, r expr.LoadedMetricsReader) (ConditionEvaluator, error)
 }
 
 //go:generate mockery --name ConditionEvaluator --structname ConditionEvaluatorMock --with-expecter --output eval_mocks --outpkg eval_mocks
@@ -39,8 +39,6 @@ type ConditionEvaluator interface {
 	EvaluateRaw(ctx context.Context, now time.Time) (resp *backend.QueryDataResponse, err error)
 	// Evaluate evaluates the condition and converts the response to Results
 	Evaluate(ctx context.Context, now time.Time) (Results, error)
-
-	Prepare(state PreviousState)
 }
 
 type expressionService interface {
@@ -74,26 +72,6 @@ func (r *conditionEvaluator) EvaluateRaw(ctx context.Context, now time.Time) (re
 		execCtx = timeoutCtx
 	}
 	return r.expressionService.ExecutePipeline(execCtx, now, r.pipeline)
-}
-
-func (r *conditionEvaluator) Prepare(prev PreviousState) {
-	for _, node := range r.pipeline {
-		if node.NodeType() != expr.TypeCMDNode {
-			continue
-		}
-		cmdNode, ok := node.(*expr.CMDNode)
-		if !ok {
-			continue
-		}
-		if cmdNode.CMDType != expr.TypeHysteresis {
-			continue
-		}
-		hyst, ok := cmdNode.Command.(*expr.HysteresisCommand)
-		if !ok {
-			continue
-		}
-		hyst.Init(prev.ActiveResults)
-	}
 }
 
 // Evaluate evaluates the condition and converts the response to Results
@@ -265,11 +243,12 @@ func buildDatasourceHeaders(ctx context.Context) map[string]string {
 }
 
 // getExprRequest validates the condition, gets the datasource information and creates an expr.Request from it.
-func getExprRequest(ctx EvaluationContext, data []models.AlertQuery, dsCacheService datasources.CacheService) (*expr.Request, error) {
+func getExprRequest(ctx EvaluationContext, data []models.AlertQuery, dsCacheService datasources.CacheService, r expr.LoadedMetricsReader) (*expr.Request, error) {
 	req := &expr.Request{
-		OrgId:   ctx.User.OrgID,
-		Headers: buildDatasourceHeaders(ctx.Ctx),
-		User:    ctx.User,
+		OrgId:               ctx.User.OrgID,
+		Headers:             buildDatasourceHeaders(ctx.Ctx),
+		User:                ctx.User,
+		LoadedMetricsReader: r,
 	}
 
 	datasources := make(map[string]*datasources.DataSource, len(data))
@@ -639,7 +618,7 @@ func (evalResults Results) AsDataFrame() data.Frame {
 }
 
 func (e *evaluatorImpl) Validate(ctx EvaluationContext, condition models.Condition) error {
-	req, err := getExprRequest(ctx, condition.Data, e.dataSourceCache)
+	req, err := getExprRequest(ctx, condition.Data, e.dataSourceCache, nil)
 	if err != nil {
 		return err
 	}
@@ -659,14 +638,14 @@ func (e *evaluatorImpl) Validate(ctx EvaluationContext, condition models.Conditi
 	return err
 }
 
-func (e *evaluatorImpl) Create(ctx EvaluationContext, condition models.Condition) (ConditionEvaluator, error) {
+func (e *evaluatorImpl) Create(ctx EvaluationContext, condition models.Condition, r expr.LoadedMetricsReader) (ConditionEvaluator, error) {
 	if len(condition.Data) == 0 {
 		return nil, errors.New("expression list is empty. must be at least 1 expression")
 	}
 	if len(condition.Condition) == 0 {
 		return nil, errors.New("condition must not be empty")
 	}
-	req, err := getExprRequest(ctx, condition.Data, e.dataSourceCache)
+	req, err := getExprRequest(ctx, condition.Data, e.dataSourceCache, r)
 	if err != nil {
 		return nil, err
 	}
@@ -693,6 +672,17 @@ func (e *evaluatorImpl) create(condition models.Condition, req *expr.Request) (C
 	return nil, fmt.Errorf("condition %s does not exist, must be one of %v", condition.Condition, conditions)
 }
 
-type PreviousState struct {
-	ActiveResults map[uint64]struct{}
+type NoLoadedAlertsReader struct {
+}
+
+func (n NoLoadedAlertsReader) Read(_ context.Context) (map[uint64]struct{}, error) {
+	return nil, nil
+}
+
+type LoadedAlertsReader struct {
+	loaded map[uint64]struct{}
+}
+
+func (n LoadedAlertsReader) Read(_ context.Context) (map[uint64]struct{}, error) {
+	return n.loaded, nil
 }
