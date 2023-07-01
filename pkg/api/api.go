@@ -422,7 +422,7 @@ func (hs *HTTPServer) registerRoutes() {
 			pluginRoute.Get("/:pluginId/metrics", reqOrgAdmin, routing.Wrap(hs.CollectPluginMetrics))
 		})
 
-		apiRoute.Get("/frontend/settings/", hs.GetFrontendSettings, requestmeta.SetRequestMetaData(requestmeta.RequestMetaData{Team: "frontend"}))
+		apiRoute.Get("/frontend/settings/", hs.GetFrontendSettings)
 		apiRoute.Any("/datasources/proxy/:id/*", authorize(ac.EvalPermission(datasources.ActionQuery)), hs.ProxyDataSourceRequest)
 		apiRoute.Any("/datasources/proxy/uid/:uid/*", authorize(ac.EvalPermission(datasources.ActionQuery)), hs.ProxyDataSourceRequestWithUID)
 		apiRoute.Any("/datasources/proxy/:id", authorize(ac.EvalPermission(datasources.ActionQuery)), hs.ProxyDataSourceRequest)
