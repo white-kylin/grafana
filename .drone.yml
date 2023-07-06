@@ -6815,6 +6815,46 @@ volumes:
 ---
 clone:
   retries: 3
+depends_on: []
+image_pull_secrets:
+- dockerconfigjson
+kind: pipeline
+name: publish-ci-build-container-image
+node:
+  type: no-parallel
+platform:
+  arch: amd64
+  os: linux
+services: []
+steps:
+- commands:
+  - if [ -z "${BUILD_CONTAINER_VERSION}" ]; then echo Missing BUILD_CONTAINER_VERSION;
+    false; fi
+  - printenv GCP_KEY > /tmp/key.json
+  - gcloud auth activate-service-account --key-file=/tmp/key.json
+  - gsutil cp gs://grafana-private-downloads/MacOSX10.15.sdk.tar.xz ./scripts/build/ci-build/MacOSX10.15.sdk.tar.xz
+  - docker build -t "grafana/build-container:${BUILD_CONTAINER_VERSION}" ./scripts/build/ci-build
+  environment:
+    GCP_KEY:
+      from_secret: gcp_download_build_container_assets_key
+  image: google/cloud-sdk:431.0.0
+  name: build
+  volumes:
+  - name: docker
+    path: /var/run/docker.sock
+trigger:
+  event:
+  - promote
+  target:
+  - ci-build-container-image
+type: docker
+volumes:
+- host:
+    path: /var/run/docker.sock
+  name: docker
+---
+clone:
+  retries: 3
 kind: pipeline
 name: scan-grafana/grafana:latest-image
 platform:
@@ -7063,6 +7103,12 @@ kind: secret
 name: gcp_upload_artifacts_key
 ---
 get:
+  name: credentials.json
+  path: infra/data/ci/grafana/assets-downloader-build-container-service-account
+kind: secret
+name: gcp_download_build_container_assets_key
+---
+get:
   name: application_id
   path: infra/data/ci/datasources/cpp-azure-resourcemanager-credentials
 kind: secret
@@ -7189,6 +7235,6 @@ kind: secret
 name: delivery-bot-app-private-key
 ---
 kind: signature
-hmac: 5b576f21a7afb08759ad4ac7b74a54afcfbf9b5eac0e5894857ce4cdd0feed50
+hmac: b9c6a5bacfbd3e3907bcefdb78c5bd2f351c553e507515eb80081d9a1d662e80
 
 ...
