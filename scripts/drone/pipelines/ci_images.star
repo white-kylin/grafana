@@ -95,7 +95,7 @@ def publish_ci_build_container_image_pipeline():
                     "gsutil cp gs://grafana-private-downloads/MacOSX10.15.sdk.tar.xz ./scripts/build/ci-build/MacOSX10.15.sdk.tar.xz",
                     "docker build -t \"grafana/build-container:${BUILD_CONTAINER_VERSION}\" ./scripts/build/ci-build",
                 ],
-            }
+            },
         ],
     )
 
